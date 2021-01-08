@@ -4,9 +4,8 @@ const matter = require('gray-matter')
 
 const unified = require('unified')
 const remarkParse = require('remark-parse')
-const remarkStringify = require('remark-stringify')
 const remark2rehype = require('remark-rehype')
-const rehypeStringify = require('remark-stringify')
+const rehypeStringify = require('rehype-stringify')
 
 const markdownPlugin = (options = { remarkPlugins: [], rehypePlugins: [] }) => {
   const filter = createFilter(options.include, options.exclude)
@@ -14,46 +13,29 @@ const markdownPlugin = (options = { remarkPlugins: [], rehypePlugins: [] }) => {
   return {
     name: 'rollup-plugin-markdown',
     transform(code, id) {
-      if (!filter(id) === -1) return
-
-      const extension = path.extname(id)
-
-      if (extension !== '.md') return
+      if (!filter(id) === -1 || path.extname(id) !== '.md') return
 
       const matterResult = matter(code)
-      let ast = {
-        code: `export default {}`,
-        map: { mappings: '' },
-      }
-
-      unified()
+      const html = unified()
         .use(remarkParse)
         .use(options.remarkPlugins)
-        .use(remarkStringify)
         .use(remark2rehype)
         .use(options.rehypePlugins)
         .use(rehypeStringify)
-        .process(matterResult.content, (err, file) => {
-          if (err) {
-            this.error(err)
-            return
-          }
-
-          const html = file.toString('utf-8');
-          const exportFromModule = JSON.stringify({
-            html,
-            metadata: matterResult.data,
-            filename: path.basename(id),
-            path: id,
-          })
-
-          ast = {
-            code: `export default ${exportFromModule}`,
-            map: { mappings: '' },
-          }
-        })
+        .processSync({ contents: matterResult.content })
+        .toString('utf8')
       
-      return ast
+      const exportFromModule = JSON.stringify({
+        html,
+        metadata: matterResult.data,
+        filename: path.basename(id),
+        path: id,
+      })
+
+      return {
+        code: `export default ${exportFromModule}`,
+        map: { mappings: '' },
+      }
     },
   }
 }
